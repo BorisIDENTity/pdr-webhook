@@ -76,14 +76,14 @@ async function appendToSheet(sheetName, row) {
       }, res => {
         let data = '';
         res.on('data', d => data += d);
-        res.on('end', () => { console.log(`[SHEETS:${sheetName}] נוסף: ${row[2]}`); resolve(); });
+        res.on('end', () => { console.log(`[SHEETS:${sheetName}] Added: ${row[2]}`); resolve(); });
       });
       req.on('error', reject);
       req.write(body);
       req.end();
     });
   } catch (err) {
-    console.error('[SHEETS] שגיאה:', err.message);
+    console.error('[SHEETS] Error:', err.message);
   }
 }
 
@@ -93,11 +93,11 @@ async function initSheets() {
     const sheets = [
       {
         name: 'Clients',
-        headers: ['תאריך', 'מקור', 'שם פרטי', 'שם משפחה', 'טלפון', 'אימייל', 'רכב', 'שנה', 'סוג שירות', 'כתובת', 'הודעה', 'סטטוס']
+        headers: ['Date', 'Source', 'First Name', 'Last Name', 'Phone', 'Email', 'Car Make & Model', 'Year', 'Service Type', 'Address', 'Message', 'Status']
       },
       {
         name: 'Course',
-        headers: ['תאריך', 'שם פרטי', 'שם משפחה', 'טלפון', 'אימייל', 'ניסיון בתעשייה', 'מטרה', 'איך שמע עלינו', 'גיל', 'רוצה ללמוד', 'הודעה', 'סטטוס']
+        headers: ['Date', 'First Name', 'Last Name', 'Phone', 'Email', 'Industry Experience', 'Goal', 'How Did You Hear', 'Age', 'Want to Learn', 'Message', 'Status']
       },
     ];
     for (const sheet of sheets) {
@@ -117,14 +117,14 @@ async function initSheets() {
         }, res => {
           let d = '';
           res.on('data', c => d += c);
-          res.on('end', () => { console.log(`[SHEETS] כותרות ${sheet.name} מוכנות`); resolve(); });
+          res.on('end', () => { console.log(`[SHEETS] Headers set for ${sheet.name}`); resolve(); });
         });
         req.on('error', () => resolve());
         req.write(body);
         req.end();
       });
     }
-  } catch (e) { console.error('[SHEETS] init error:', e.message); }
+  } catch (e) { console.error('[SHEETS] Init error:', e.message); }
 }
 
 // META WEBHOOK
@@ -144,8 +144,8 @@ app.post('/webhook/meta', async (req, res) => {
       change.value.field_data?.forEach(f => { fields[f.name] = f.values?.[0] || ''; });
       const fullName = (fields['full_name'] || '').split(' ');
       await appendToSheet('Clients', [
-        new Date().toLocaleString('he-IL'),
-        'Meta/פייסבוק',
+        new Date().toLocaleString('en-CA'),
+        'Meta/Facebook',
         fullName[0] || '',
         fullName.slice(1).join(' ') || '',
         fields['phone_number'] || '',
@@ -155,55 +155,53 @@ app.post('/webhook/meta', async (req, res) => {
         '',
         '',
         fields['message'] || '',
-        'חדש',
+        'New',
       ]);
     }
   }
   res.sendStatus(200);
 });
 
-// WIX - טופס PDR ראשי
+// WIX - PDR main form
 app.post('/webhook/wix', async (req, res) => {
   const secret = req.headers['x-wix-secret'];
   if (CONFIG.WIX_SECRET && secret !== CONFIG.WIX_SECRET) return res.sendStatus(401);
   const b = req.body;
-  const firstName = b.firstName || b.first_name || b.name || '';
-  const lastName  = b.lastName  || b.last_name  || '';
   await appendToSheet('Clients', [
-    new Date().toLocaleString('he-IL'),
+    new Date().toLocaleString('en-CA'),
     'Wix',
-    firstName,
-    lastName,
-    b.phone || b.phoneNumber || '',
-    b.email || '',
-    b.car || b.makeModel || b.make_and_model || '',
-    b.year || '',
+    b.firstName || b.first_name || b.name || '',
+    b.lastName  || b.last_name  || '',
+    b.phone     || b.phoneNumber || '',
+    b.email     || '',
+    b.car       || b.makeModel  || b.make_and_model || '',
+    b.year      || '',
     b.serviceType || b.service_type || b.type_of_service || '',
-    b.address || '',
-    b.message || '',
-    'חדש',
+    b.address   || '',
+    b.message   || '',
+    'New',
   ]);
   res.status(200).json({ success: true });
 });
 
-// WIX - טופס קורס
+// WIX - Course form
 app.post('/webhook/course', async (req, res) => {
   const secret = req.headers['x-wix-secret'];
   if (CONFIG.WIX_SECRET && secret !== CONFIG.WIX_SECRET) return res.sendStatus(401);
   const b = req.body;
   await appendToSheet('Course', [
-    new Date().toLocaleString('he-IL'),
-    b.firstName || b.first_name || '',
-    b.lastName  || b.last_name  || '',
-    b.phone     || b.phoneNumber || '',
-    b.email     || '',
+    new Date().toLocaleString('en-CA'),
+    b.firstName  || b.first_name || '',
+    b.lastName   || b.last_name  || '',
+    b.phone      || b.phoneNumber || '',
+    b.email      || '',
     b.experience || b.industry_experience || '',
-    b.goal      || b.career_goal || '',
-    b.source    || b.how_did_you_hear || '',
-    b.age       || '',
-    b.learn     || b.want_to_learn || '',
-    b.message   || '',
-    'חדש',
+    b.goal       || b.career_goal || '',
+    b.source     || b.how_did_you_hear || '',
+    b.age        || '',
+    b.learn      || b.want_to_learn || '',
+    b.message    || '',
+    'New',
   ]);
   res.status(200).json({ success: true });
 });
@@ -211,6 +209,6 @@ app.post('/webhook/course', async (req, res) => {
 app.get('/health', (req, res) => res.json({ status: 'ok', sheets: CONFIG.SPREADSHEET_ID }));
 
 app.listen(CONFIG.PORT, async () => {
-  console.log(`\n🚗 PDR Webhook Server on port ${CONFIG.PORT}`);
+  console.log(`\nPDR Webhook Server on port ${CONFIG.PORT}`);
   await initSheets();
 });

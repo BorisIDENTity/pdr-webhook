@@ -9,7 +9,6 @@ app.use(express.urlencoded({ extended: true }));
 const CONFIG = {
   PORT: process.env.PORT || 3000,
   META_VERIFY_TOKEN: process.env.META_VERIFY_TOKEN || 'pdr_meta_token_2025',
-  WIX_SECRET: process.env.WIX_SECRET || 'pdr_wix_secret_2025',
   SPREADSHEET_ID: '1kmjSOTRzfSncHBBKOmv0CB4ogVVpFIaC0gsd5qp-6qE',
   GOOGLE_CLIENT_EMAIL: process.env.GOOGLE_CLIENT_EMAIL || 'pdr-sheets@gen-lang-client-0176741221.iam.gserviceaccount.com',
   GOOGLE_PRIVATE_KEY: process.env.GOOGLE_PRIVATE_KEY || '',
@@ -91,14 +90,8 @@ async function initSheets() {
   try {
     const token = await getGoogleToken();
     const sheets = [
-      {
-        name: 'Clients',
-        headers: ['Date', 'Source', 'First Name', 'Last Name', 'Phone', 'Email', 'Car Make & Model', 'Year', 'Service Type', 'Address', 'Message', 'Status']
-      },
-      {
-        name: 'Course',
-        headers: ['Date', 'First Name', 'Last Name', 'Phone', 'Email', 'Industry Experience', 'Goal', 'How Did You Hear', 'Age', 'Want to Learn', 'Message', 'Status']
-      },
+      { name: 'Clients', headers: ['Date', 'Source', 'First Name', 'Last Name', 'Phone', 'Email', 'Car Make & Model', 'Year', 'Service Type', 'Address', 'Message', 'Image Left', 'Image Right', 'Image Front', 'Status'] },
+      { name: 'Course',  headers: ['Date', 'First Name', 'Last Name', 'Phone', 'Email', 'Industry Experience', 'Goal', 'How Did You Hear', 'Age', 'Want to Learn', 'Message', 'Status'] },
     ];
     for (const sheet of sheets) {
       const body = JSON.stringify({ values: [sheet.headers] });
@@ -106,28 +99,17 @@ async function initSheets() {
       const path = `/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${range}?valueInputOption=USER_ENTERED`;
       await new Promise((resolve) => {
         const req = https.request({
-          hostname: 'sheets.googleapis.com',
-          path,
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
-          },
-        }, res => {
-          let d = '';
-          res.on('data', c => d += c);
-          res.on('end', () => { console.log(`[SHEETS] Headers set for ${sheet.name}`); resolve(); });
-        });
+          hostname: 'sheets.googleapis.com', path, method: 'PUT',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>{ console.log(`Headers set: ${sheet.name}`); resolve(); }); });
         req.on('error', () => resolve());
-        req.write(body);
-        req.end();
+        req.write(body); req.end();
       });
     }
-  } catch (e) { console.error('[SHEETS] Init error:', e.message); }
+  } catch (e) { console.error('Init error:', e.message); }
 }
 
-// META WEBHOOK
+// META
 app.get('/webhook/meta', (req, res) => {
   const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = req.query;
   if (mode === 'subscribe' && token === CONFIG.META_VERIFY_TOKEN) res.status(200).send(challenge);
@@ -144,50 +126,43 @@ app.post('/webhook/meta', async (req, res) => {
       change.value.field_data?.forEach(f => { fields[f.name] = f.values?.[0] || ''; });
       const fullName = (fields['full_name'] || '').split(' ');
       await appendToSheet('Clients', [
-        new Date().toLocaleString('en-CA'),
-        'Meta/Facebook',
-        fullName[0] || '',
-        fullName.slice(1).join(' ') || '',
-        fields['phone_number'] || '',
-        fields['email'] || '',
-        fields['car'] || fields['make_model'] || '',
-        fields['year'] || '',
-        '',
-        '',
-        fields['message'] || '',
-        'New',
+        new Date().toLocaleString('en-CA'), 'Meta/Facebook',
+        fullName[0] || '', fullName.slice(1).join(' ') || '',
+        fields['phone_number'] || '', fields['email'] || '',
+        fields['car'] || '', fields['year'] || '',
+        '', '', fields['message'] || '', '', '', '', 'New',
       ]);
     }
   }
   res.sendStatus(200);
 });
 
-// WIX - PDR main form
+// WIX - PDR form (no secret check)
 app.post('/webhook/wix', async (req, res) => {
-  const secret = req.headers['x-wix-secret'];
-  if (CONFIG.WIX_SECRET && secret !== CONFIG.WIX_SECRET) return res.sendStatus(401);
+  console.log('[WIX] Received:', JSON.stringify(req.body));
   const b = req.body;
   await appendToSheet('Clients', [
-    new Date().toLocaleString('en-CA'),
-    'Wix',
-    b.firstName || b.first_name || b.name || '',
+    new Date().toLocaleString('en-CA'), 'Wix',
+    b.firstName || b.first_name || '',
     b.lastName  || b.last_name  || '',
     b.phone     || b.phoneNumber || '',
     b.email     || '',
-    b.car       || b.makeModel  || b.make_and_model || '',
+    b.car       || b.makeModel  || '',
     b.year      || '',
-    b.serviceType || b.service_type || b.type_of_service || '',
+    b.serviceType || b.service_type || '',
     b.address   || '',
     b.message   || '',
+    b.imageLeft  || b.left  || '',
+    b.imageRight || b.right || '',
+    b.imageFront || b.front || '',
     'New',
   ]);
   res.status(200).json({ success: true });
 });
 
-// WIX - Course form
+// WIX - Course form (no secret check)
 app.post('/webhook/course', async (req, res) => {
-  const secret = req.headers['x-wix-secret'];
-  if (CONFIG.WIX_SECRET && secret !== CONFIG.WIX_SECRET) return res.sendStatus(401);
+  console.log('[COURSE] Received:', JSON.stringify(req.body));
   const b = req.body;
   await appendToSheet('Course', [
     new Date().toLocaleString('en-CA'),
@@ -195,11 +170,11 @@ app.post('/webhook/course', async (req, res) => {
     b.lastName   || b.last_name  || '',
     b.phone      || b.phoneNumber || '',
     b.email      || '',
-    b.experience || b.industry_experience || '',
-    b.goal       || b.career_goal || '',
-    b.source     || b.how_did_you_hear || '',
+    b.experience || '',
+    b.goal       || '',
+    b.source     || '',
     b.age        || '',
-    b.learn      || b.want_to_learn || '',
+    b.learn      || '',
     b.message    || '',
     'New',
   ]);
@@ -209,6 +184,6 @@ app.post('/webhook/course', async (req, res) => {
 app.get('/health', (req, res) => res.json({ status: 'ok', sheets: CONFIG.SPREADSHEET_ID }));
 
 app.listen(CONFIG.PORT, async () => {
-  console.log(`\nPDR Webhook Server on port ${CONFIG.PORT}`);
+  console.log(`PDR Webhook Server on port ${CONFIG.PORT}`);
   await initSheets();
 });

@@ -26,33 +26,19 @@ async function getGoogleToken() {
     iss: CONFIG.GOOGLE_CLIENT_EMAIL,
     scope: 'https://www.googleapis.com/auth/spreadsheets',
     aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
+    exp: now + 3600, iat: now,
   }));
   const key = CONFIG.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
   const sign = crypto.createSign('RSA-SHA256');
   sign.update(`${header}.${payload}`);
-  const sig = sign.sign(key, 'base64')
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const sig = sign.sign(key, 'base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   const jwt = `${header}.${payload}.${sig}`;
   return new Promise((resolve, reject) => {
     const body = `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`;
-    const req = https.request({
-      hostname: 'oauth2.googleapis.com',
-      path: '/token',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    }, res => {
-      let data = '';
-      res.on('data', d => data += d);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data).access_token); }
-        catch { reject(new Error('token parse error')); }
-      });
+    const req = https.request({ hostname:'oauth2.googleapis.com', path:'/token', method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'} }, res => {
+      let data=''; res.on('data',d=>data+=d); res.on('end',()=>{ try{resolve(JSON.parse(data).access_token);}catch{reject(new Error('token error'));} });
     });
-    req.on('error', reject);
-    req.write(body);
-    req.end();
+    req.on('error',reject); req.write(body); req.end();
   });
 }
 
@@ -63,125 +49,126 @@ async function appendToSheet(sheetName, row) {
     const range = encodeURIComponent(`${sheetName}!A1`);
     const path = `/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED`;
     return new Promise((resolve, reject) => {
-      const req = https.request({
-        hostname: 'sheets.googleapis.com',
-        path,
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body),
-        },
-      }, res => {
-        let data = '';
-        res.on('data', d => data += d);
-        res.on('end', () => { console.log(`[SHEETS:${sheetName}] Added: ${row[2]}`); resolve(); });
+      const req = https.request({ hostname:'sheets.googleapis.com', path, method:'POST', headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)} }, res => {
+        let data=''; res.on('data',d=>data+=d); res.on('end',()=>{ console.log(`[SHEETS:${sheetName}] Added: ${row[2]}`); resolve(); });
       });
-      req.on('error', reject);
-      req.write(body);
-      req.end();
+      req.on('error',reject); req.write(body); req.end();
     });
-  } catch (err) {
-    console.error('[SHEETS] Error:', err.message);
-  }
+  } catch(err) { console.error('[SHEETS] Error:', err.message); }
 }
 
 async function initSheets() {
   try {
     const token = await getGoogleToken();
     const sheets = [
-      { name: 'Clients', headers: ['Date', 'Source', 'First Name', 'Last Name', 'Phone', 'Email', 'Car Make & Model', 'Year', 'Service Type', 'Address', 'Message', 'Image Left', 'Image Right', 'Image Front', 'Status'] },
-      { name: 'Course',  headers: ['Date', 'First Name', 'Last Name', 'Phone', 'Email', 'Industry Experience', 'Goal', 'How Did You Hear', 'Age', 'Want to Learn', 'Message', 'Status'] },
+      { name:'Clients', headers:['Date','Source','First Name','Last Name','Phone','Email','Car Make & Model','Year','Service Type','Address','Message','Image Left','Image Right','Image Front','Status'] },
+      { name:'Course',  headers:['Date','First Name','Last Name','Phone','Email','Industry Experience','Goal','How Did You Hear','Age','Want to Learn','Message','Status'] },
     ];
     for (const sheet of sheets) {
-      const body = JSON.stringify({ values: [sheet.headers] });
+      const body = JSON.stringify({ values:[sheet.headers] });
       const range = encodeURIComponent(`${sheet.name}!A1`);
       const path = `/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${range}?valueInputOption=USER_ENTERED`;
-      await new Promise((resolve) => {
-        const req = https.request({
-          hostname: 'sheets.googleapis.com', path, method: 'PUT',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-        }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>{ console.log(`Headers set: ${sheet.name}`); resolve(); }); });
-        req.on('error', () => resolve());
-        req.write(body); req.end();
+      await new Promise(resolve => {
+        const req = https.request({ hostname:'sheets.googleapis.com', path, method:'PUT', headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)} }, res => {
+          let d=''; res.on('data',c=>d+=c); res.on('end',()=>{ console.log(`Headers set: ${sheet.name}`); resolve(); });
+        });
+        req.on('error',()=>resolve()); req.write(body); req.end();
       });
     }
-  } catch (e) { console.error('Init error:', e.message); }
+  } catch(e) { console.error('Init error:', e.message); }
 }
 
-// META
+// פונקציה לחילוץ שדות מ-Wix submissions
+function parseWixSubmissions(data) {
+  const result = {};
+  const submissions = data?.submissions || [];
+  submissions.forEach(({ label, value }) => {
+    const l = label.toLowerCase();
+    if (l.includes('first name'))    result.firstName   = value;
+    else if (l.includes('last name')) result.lastName    = value;
+    else if (l.includes('phone'))     result.phone       = value;
+    else if (l.includes('email'))     result.email       = value;
+    else if (l.includes('make') || l.includes('model')) result.car = value;
+    else if (l.includes('year'))      result.year        = value;
+    else if (l.includes('service'))   result.serviceType = value;
+    else if (l.includes('address'))   result.address     = value;
+    else if (l.includes('message'))   result.message     = value;
+    else if (l.includes('left'))      result.imageLeft   = value;
+    else if (l.includes('right'))     result.imageRight  = value;
+    else if (l.includes('front'))     result.imageFront  = value;
+    // Course fields
+    else if (l.includes('experience') || l.includes('industry')) result.experience = value;
+    else if (l.includes('goal') || l.includes('career'))         result.goal       = value;
+    else if (l.includes('hear'))      result.source      = value;
+    else if (l.includes('age') || l.includes('old'))             result.age        = value;
+    else if (l.includes('learn'))     result.learn       = value;
+  });
+  return result;
+}
+
+// META WEBHOOK
 app.get('/webhook/meta', (req, res) => {
-  const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = req.query;
-  if (mode === 'subscribe' && token === CONFIG.META_VERIFY_TOKEN) res.status(200).send(challenge);
+  const { 'hub.mode':mode, 'hub.verify_token':token, 'hub.challenge':challenge } = req.query;
+  if (mode==='subscribe' && token===CONFIG.META_VERIFY_TOKEN) res.status(200).send(challenge);
   else res.sendStatus(403);
 });
 
 app.post('/webhook/meta', async (req, res) => {
   const body = req.body;
   if (body.object !== 'page') return res.sendStatus(200);
-  for (const entry of body.entry || []) {
-    for (const change of entry.changes || []) {
+  for (const entry of body.entry||[]) {
+    for (const change of entry.changes||[]) {
       if (change.field !== 'leadgen') continue;
       const fields = {};
-      change.value.field_data?.forEach(f => { fields[f.name] = f.values?.[0] || ''; });
-      const fullName = (fields['full_name'] || '').split(' ');
+      change.value.field_data?.forEach(f => { fields[f.name] = f.values?.[0]||''; });
+      const fullName = (fields['full_name']||'').split(' ');
       await appendToSheet('Clients', [
         new Date().toLocaleString('en-CA'), 'Meta/Facebook',
-        fullName[0] || '', fullName.slice(1).join(' ') || '',
-        fields['phone_number'] || '', fields['email'] || '',
-        fields['car'] || '', fields['year'] || '',
-        '', '', fields['message'] || '', '', '', '', 'New',
+        fullName[0]||'', fullName.slice(1).join(' ')||'',
+        fields['phone_number']||'', fields['email']||'',
+        fields['car']||'', fields['year']||'',
+        '','', fields['message']||'','','','','New',
       ]);
     }
   }
   res.sendStatus(200);
 });
 
-// WIX - PDR form (no secret check)
+// WIX - PDR form
 app.post('/webhook/wix', async (req, res) => {
   console.log('[WIX] Received:', JSON.stringify(req.body));
-  const b = req.body;
+  const data = req.body?.data || req.body;
+  const f = parseWixSubmissions(data);
   await appendToSheet('Clients', [
     new Date().toLocaleString('en-CA'), 'Wix',
-    b.firstName || b.first_name || '',
-    b.lastName  || b.last_name  || '',
-    b.phone     || b.phoneNumber || '',
-    b.email     || '',
-    b.car       || b.makeModel  || '',
-    b.year      || '',
-    b.serviceType || b.service_type || '',
-    b.address   || '',
-    b.message   || '',
-    b.imageLeft  || b.left  || '',
-    b.imageRight || b.right || '',
-    b.imageFront || b.front || '',
+    f.firstName||'', f.lastName||'',
+    f.phone||'', f.email||'',
+    f.car||'', f.year||'',
+    f.serviceType||'', f.address||'',
+    f.message||'',
+    f.imageLeft||'', f.imageRight||'', f.imageFront||'',
     'New',
   ]);
   res.status(200).json({ success: true });
 });
 
-// WIX - Course form (no secret check)
+// WIX - Course form
 app.post('/webhook/course', async (req, res) => {
   console.log('[COURSE] Received:', JSON.stringify(req.body));
-  const b = req.body;
+  const data = req.body?.data || req.body;
+  const f = parseWixSubmissions(data);
   await appendToSheet('Course', [
     new Date().toLocaleString('en-CA'),
-    b.firstName  || b.first_name || '',
-    b.lastName   || b.last_name  || '',
-    b.phone      || b.phoneNumber || '',
-    b.email      || '',
-    b.experience || '',
-    b.goal       || '',
-    b.source     || '',
-    b.age        || '',
-    b.learn      || '',
-    b.message    || '',
+    f.firstName||'', f.lastName||'',
+    f.phone||'', f.email||'',
+    f.experience||'', f.goal||'', f.source||'',
+    f.age||'', f.learn||'', f.message||'',
     'New',
   ]);
   res.status(200).json({ success: true });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', sheets: CONFIG.SPREADSHEET_ID }));
+app.get('/health', (req, res) => res.json({ status:'ok', sheets:CONFIG.SPREADSHEET_ID }));
 
 app.listen(CONFIG.PORT, async () => {
   console.log(`PDR Webhook Server on port ${CONFIG.PORT}`);

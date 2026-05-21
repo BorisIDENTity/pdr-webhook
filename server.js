@@ -137,10 +137,11 @@ app.post('/webhook/meta', async (req, res) => {
 // WIX - PDR form
 app.post('/webhook/wix', async (req, res) => {
   console.log('[WIX] Received:', JSON.stringify(req.body));
+  const source = req.query.source || 'Wix';
   const data = req.body?.data || req.body;
   const f = parseWixSubmissions(data);
   await appendToSheet('Clients', [
-    new Date().toLocaleString('en-CA'), 'Wix',
+    new Date().toLocaleString('en-CA'), source,
     f.firstName||'', f.lastName||'',
     f.phone||'', f.email||'',
     f.car||'', f.year||'',

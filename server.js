@@ -123,7 +123,7 @@ app.post('/webhook/meta', async (req, res) => {
       change.value.field_data?.forEach(f => { fields[f.name] = f.values?.[0]||''; });
       const fullName = (fields['full_name']||'').split(' ');
       await appendToSheet('Clients', [
-        new Date().toLocaleString('en-CA'), 'Meta/Facebook',
+       new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto' }), 'Meta/Facebook',
         fullName[0]||'', fullName.slice(1).join(' ')||'',
         fields['phone_number']||'', fields['email']||'',
         fields['car']||'', fields['year']||'',
@@ -141,7 +141,7 @@ app.post('/webhook/wix', async (req, res) => {
   const data = req.body?.data || req.body;
   const f = parseWixSubmissions(data);
   await appendToSheet('Clients', [
-    new Date().toLocaleString('en-CA'), source,
+   new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto' }), source,
     f.firstName||'', f.lastName||'',
     f.phone||'', f.email||'',
     f.car||'', f.year||'',
@@ -159,7 +159,7 @@ app.post('/webhook/course', async (req, res) => {
   const data = req.body?.data || req.body;
   const f = parseWixSubmissions(data);
   await appendToSheet('Course', [
-    new Date().toLocaleString('en-CA'),
+   new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto' }),
     f.firstName||'', f.lastName||'',
     f.phone||'', f.email||'',
     f.experience||'', f.goal||'', f.source||'',

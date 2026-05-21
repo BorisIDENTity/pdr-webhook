@@ -86,7 +86,7 @@ function parseWixSubmissions(data) {
     const l = label.toLowerCase();
     if (l.includes('first name'))    result.firstName   = value;
     else if (l.includes('last name')) result.lastName    = value;
-    else if (l.includes('phone'))     result.phone       = value;
+    else if (l.includes('phone')) result.phone = "'" + value;
     else if (l.includes('email'))     result.email       = value;
     else if (l.includes('make') || l.includes('model')) result.car = value;
     else if (l.includes('year'))      result.year        = value;
